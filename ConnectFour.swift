@@ -428,80 +428,42 @@ struct PieceView: View {
     let animate: Bool
     let size: CGFloat
 
-    @State private var dropOffset: CGFloat = -500
+    @State private var dropOffset: CGFloat = -400
     @State private var pulseScale: CGFloat = 1.0
-    @State private var glowOpacity: Double = 0.0
 
     var body: some View {
-        ZStack {
-            // Outer glow for winning pieces
-            if isWinning {
+        Circle()
+            .fill(
+                RadialGradient(
+                    gradient: Gradient(colors: [
+                        player.lightColor,
+                        player.color,
+                        player.darkColor
+                    ]),
+                    center: .init(x: 0.35, y: 0.3),
+                    startRadius: 0,
+                    endRadius: size * 0.55
+                )
+            )
+            .overlay(
                 Circle()
-                    .fill(player.color)
-                    .blur(radius: 12)
-                    .opacity(glowOpacity)
-                    .scaleEffect(1.3)
-            }
-
-            // Main piece with 3D effect
-            Circle()
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: player.lightColor, location: 0.0),
-                            .init(color: player.color, location: 0.35),
-                            .init(color: player.darkColor, location: 1.0)
-                        ]),
-                        center: .init(x: 0.3, y: 0.25),
-                        startRadius: 0,
-                        endRadius: size * 0.6
-                    )
-                )
-                .overlay(
-                    // Specular highlight
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                gradient: Gradient(colors: [
-                                    Color.white.opacity(0.7),
-                                    Color.white.opacity(0.0)
-                                ]),
-                                center: .init(x: 0.3, y: 0.25),
-                                startRadius: 0,
-                                endRadius: size * 0.25
-                            )
-                        )
-                        .scaleEffect(0.85)
-                )
-                .overlay(
-                    // Inner edge definition
-                    Circle()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [player.darkColor.opacity(0.5), Color.clear],
-                                startPoint: .bottom,
-                                endPoint: .top
-                            ),
-                            lineWidth: 2
-                        )
-                )
-                .shadow(color: Color.black.opacity(0.4), radius: 3, x: 2, y: 3)
-        }
-        .scaleEffect(isWinning ? pulseScale : 1.0)
-        .offset(y: animate ? dropOffset : 0)
-        .onAppear {
-            if animate {
-                withAnimation(.interpolatingSpring(stiffness: 200, damping: 15)) {
-                    dropOffset = 0
+                    .strokeBorder(player.darkColor.opacity(0.4), lineWidth: 1.5)
+            )
+            .shadow(color: Color.black.opacity(0.3), radius: 2, x: 1, y: 2)
+            .scaleEffect(isWinning ? pulseScale : 1.0)
+            .offset(y: animate ? dropOffset : 0)
+            .onAppear {
+                if animate {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        dropOffset = 0
+                    }
+                }
+                if isWinning {
+                    withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                        pulseScale = 1.08
+                    }
                 }
             }
-            if isWinning {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    pulseScale = 1.1
-                    glowOpacity = 0.8
-                }
-            }
-        }
     }
 }
 
@@ -946,28 +908,9 @@ struct ContentView: View {
             let textColor = GameColors.textColor(for: effectiveColorScheme)
 
             ZStack {
-                // Rich gradient background
-                LinearGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: colors.top, location: 0.0),
-                        .init(color: colors.bottom, location: 1.0)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                // Subtle pattern overlay
-                Canvas { context, size in
-                    let dotColor = effectiveColorScheme == .dark ? Color.white.opacity(0.02) : Color.black.opacity(0.02)
-                    for i in stride(from: 0, to: size.width, by: 40) {
-                        for j in stride(from: 0, to: size.height, by: 40) {
-                            let rect = CGRect(x: i, y: j, width: 1, height: 1)
-                            context.fill(Path(ellipseIn: rect), with: .color(dotColor))
-                        }
-                    }
-                }
-                .ignoresSafeArea()
+                // Background
+                colors.bottom
+                    .ignoresSafeArea()
 
                 VStack(spacing: spacing) {
                     // Top bar with sound and appearance toggles
