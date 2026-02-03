@@ -1,0 +1,23 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspace
+xcuserdata/
+
+# Compiled binary
+ConnectFour
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# Temporary files
+*.tmp
+*.temp
