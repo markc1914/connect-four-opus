@@ -271,14 +271,16 @@ class GameState: ObservableObject {
     func makeAIMove() {
         guard gameResult == .ongoing else { return }
 
+        // Copy the board for AI calculations (so we don't modify the displayed board)
+        let boardCopy = board
+
         // Run AI on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let bestCol = self.findBestMove()
+            let bestCol = self.findBestMove(board: boardCopy)
 
             DispatchQueue.main.async {
                 self.isAIThinking = false
-                // Directly place the piece without going through canDrop check
                 if let row = self.getDropRow(for: bestCol) {
                     self.board[row][bestCol] = .yellow
 
@@ -300,19 +302,22 @@ class GameState: ObservableObject {
         }
     }
 
-    func findBestMove() -> Int {
+    // MARK: - AI with local board copy
+
+    func findBestMove(board: [[Player?]]) -> Int {
+        var searchBoard = board
         var bestScore = Int.min
         var bestCol = 3
 
         for col in [3, 2, 4, 1, 5, 0, 6] {
-            guard canDropForAI(in: col) else { continue }
+            guard searchBoard[0][col] == nil else { continue }
 
-            let row = getDropRow(for: col)!
-            board[row][col] = .yellow
+            let row = getDropRowAI(board: searchBoard, col: col)!
+            searchBoard[row][col] = .yellow
 
-            let score = minimax(depth: 4, alpha: Int.min, beta: Int.max, isMaximizing: false)
+            let score = minimaxAI(board: &searchBoard, depth: 4, alpha: Int.min, beta: Int.max, isMaximizing: false)
 
-            board[row][col] = nil
+            searchBoard[row][col] = nil
 
             if score > bestScore {
                 bestScore = score
@@ -323,18 +328,22 @@ class GameState: ObservableObject {
         return bestCol
     }
 
-    func canDropForAI(in column: Int) -> Bool {
-        guard column >= 0 && column < GameState.columns else { return false }
-        return board[0][column] == nil
+    func getDropRowAI(board: [[Player?]], col: Int) -> Int? {
+        for row in (0..<GameState.rows).reversed() {
+            if board[row][col] == nil {
+                return row
+            }
+        }
+        return nil
     }
 
-    func minimax(depth: Int, alpha: Int, beta: Int, isMaximizing: Bool) -> Int {
-        if let winner = checkWinnerForAI() {
+    func minimaxAI(board: inout [[Player?]], depth: Int, alpha: Int, beta: Int, isMaximizing: Bool) -> Int {
+        if let winner = checkWinnerAI(board: board) {
             return winner == .yellow ? 10000 + depth : -10000 - depth
         }
 
-        if isBoardFull() { return 0 }
-        if depth == 0 { return evaluateBoard() }
+        if isBoardFullAI(board: board) { return 0 }
+        if depth == 0 { return evaluateBoardAI(board: board) }
 
         var alpha = alpha
         var beta = beta
@@ -342,10 +351,10 @@ class GameState: ObservableObject {
         if isMaximizing {
             var maxScore = Int.min
             for col in 0..<GameState.columns {
-                guard canDropForAI(in: col) else { continue }
-                let row = getDropRow(for: col)!
+                guard board[0][col] == nil else { continue }
+                let row = getDropRowAI(board: board, col: col)!
                 board[row][col] = .yellow
-                let score = minimax(depth: depth - 1, alpha: alpha, beta: beta, isMaximizing: false)
+                let score = minimaxAI(board: &board, depth: depth - 1, alpha: alpha, beta: beta, isMaximizing: false)
                 board[row][col] = nil
                 maxScore = max(maxScore, score)
                 alpha = max(alpha, score)
@@ -355,10 +364,10 @@ class GameState: ObservableObject {
         } else {
             var minScore = Int.max
             for col in 0..<GameState.columns {
-                guard canDropForAI(in: col) else { continue }
-                let row = getDropRow(for: col)!
+                guard board[0][col] == nil else { continue }
+                let row = getDropRowAI(board: board, col: col)!
                 board[row][col] = .red
-                let score = minimax(depth: depth - 1, alpha: alpha, beta: beta, isMaximizing: true)
+                let score = minimaxAI(board: &board, depth: depth - 1, alpha: alpha, beta: beta, isMaximizing: true)
                 board[row][col] = nil
                 minScore = min(minScore, score)
                 beta = min(beta, score)
@@ -368,25 +377,83 @@ class GameState: ObservableObject {
         }
     }
 
-    func checkWinnerForAI() -> Player? {
+    func checkWinnerAI(board: [[Player?]]) -> Player? {
         for row in 0..<GameState.rows {
             for col in 0..<GameState.columns {
-                if board[row][col] != nil && checkWin(row: row, col: col) != nil {
-                    return board[row][col]
+                if let player = board[row][col], checkWinAI(board: board, row: row, col: col, player: player) {
+                    return player
                 }
             }
         }
         return nil
     }
 
-    func evaluateBoard() -> Int {
+    func checkWinAI(board: [[Player?]], row: Int, col: Int, player: Player) -> Bool {
+        let directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        for (dr, dc) in directions {
+            var count = 1
+            var r = row + dr, c = col + dc
+            while r >= 0 && r < GameState.rows && c >= 0 && c < GameState.columns && board[r][c] == player {
+                count += 1; r += dr; c += dc
+            }
+            r = row - dr; c = col - dc
+            while r >= 0 && r < GameState.rows && c >= 0 && c < GameState.columns && board[r][c] == player {
+                count += 1; r -= dr; c -= dc
+            }
+            if count >= 4 { return true }
+        }
+        return false
+    }
+
+    func isBoardFullAI(board: [[Player?]]) -> Bool {
+        for col in 0..<GameState.columns {
+            if board[0][col] == nil { return false }
+        }
+        return true
+    }
+
+    func evaluateBoardAI(board: [[Player?]]) -> Int {
         var score = 0
         let centerCol = GameState.columns / 2
         for row in 0..<GameState.rows {
             if board[row][centerCol] == .yellow { score += 3 }
             else if board[row][centerCol] == .red { score -= 3 }
         }
-        score += evaluateWindows()
+        score += evaluateWindowsAI(board: board)
+        return score
+    }
+
+    func evaluateWindowsAI(board: [[Player?]]) -> Int {
+        var score = 0
+
+        for row in 0..<GameState.rows {
+            for col in 0..<(GameState.columns - 3) {
+                let window = (0..<4).map { board[row][col + $0] }
+                score += evaluateWindow(window)
+            }
+        }
+
+        for row in 0..<(GameState.rows - 3) {
+            for col in 0..<GameState.columns {
+                let window = (0..<4).map { board[row + $0][col] }
+                score += evaluateWindow(window)
+            }
+        }
+
+        for row in 3..<GameState.rows {
+            for col in 0..<(GameState.columns - 3) {
+                let window = (0..<4).map { board[row - $0][col + $0] }
+                score += evaluateWindow(window)
+            }
+        }
+
+        for row in 0..<(GameState.rows - 3) {
+            for col in 0..<(GameState.columns - 3) {
+                let window = (0..<4).map { board[row + $0][col + $0] }
+                score += evaluateWindow(window)
+            }
+        }
+
         return score
     }
 
@@ -527,67 +594,140 @@ struct BoardView: View {
     @State private var hoveredColumn: Int? = nil
     var colorScheme: ColorScheme = .dark
 
-    private let slotSize: CGFloat = 50
-    private let spacing: CGFloat = 5
+    private let spacing: CGFloat = 6
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Hover indicator row
-            HStack(spacing: spacing) {
-                ForEach(0..<GameState.columns, id: \.self) { col in
-                    Circle()
-                        .fill(hoveredColumn == col && gameState.canDrop(in: col) ? gameState.currentPlayer.color.opacity(0.6) : Color.clear)
-                        .frame(width: slotSize, height: slotSize)
-                }
-            }
-            .padding(.bottom, spacing)
+        GeometryReader { geo in
+            let availableWidth = geo.size.width - 40
+            let availableHeight = geo.size.height - 100
+            let slotFromWidth = (availableWidth - spacing * 8) / 7
+            let slotFromHeight = (availableHeight - spacing * 7) / 6
+            let slotSize = min(slotFromWidth, slotFromHeight, 65)
+            let boardWidth = slotSize * 7 + spacing * 8
+            let boardHeight = slotSize * 6 + spacing * 7
 
-            // Game board
-            VStack(spacing: spacing) {
-                ForEach(0..<GameState.rows, id: \.self) { row in
-                    HStack(spacing: spacing) {
-                        ForEach(0..<GameState.columns, id: \.self) { col in
-                            ZStack {
-                                Circle()
-                                    .fill(GameColors.slotBackground(for: colorScheme))
+            VStack(spacing: 0) {
+                // Hover indicator row
+                HStack(spacing: spacing) {
+                    ForEach(0..<GameState.columns, id: \.self) { col in
+                        ZStack {
+                            Circle()
+                                .fill(Color.clear)
 
-                                if let player = gameState.board[row][col] {
-                                    Circle()
-                                        .fill(player.color)
-                                        .padding(4)
-                                }
+                            if hoveredColumn == col && gameState.canDrop(in: col) {
+                                PieceView(
+                                    player: gameState.currentPlayer,
+                                    isWinning: false,
+                                    size: slotSize - 8
+                                )
+                                .opacity(0.7)
                             }
-                            .frame(width: slotSize, height: slotSize)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if gameState.canDrop(in: col) {
-                                    gameState.dropPiece(in: col)
-                                    soundManager.playDrop()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                        if case .win = gameState.gameResult {
-                                            soundManager.playWin()
-                                        } else if case .draw = gameState.gameResult {
-                                            soundManager.playDraw()
+                        }
+                        .frame(width: slotSize, height: slotSize)
+                    }
+                }
+                .frame(width: boardWidth - spacing * 2, height: slotSize)
+                .padding(.bottom, 4)
+
+                // Game board
+                VStack(spacing: spacing) {
+                    ForEach(0..<GameState.rows, id: \.self) { row in
+                        HStack(spacing: spacing) {
+                            ForEach(0..<GameState.columns, id: \.self) { col in
+                                let isWinning = gameState.winningCells.contains { $0.row == row && $0.col == col }
+
+                                ZStack {
+                                    // Slot hole with inset effect
+                                    Circle()
+                                        .fill(GameColors.slotBackground(for: colorScheme))
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(
+                                                    LinearGradient(
+                                                        colors: [
+                                                            Color.black.opacity(0.5),
+                                                            Color.white.opacity(0.1)
+                                                        ],
+                                                        startPoint: .topLeading,
+                                                        endPoint: .bottomTrailing
+                                                    ),
+                                                    lineWidth: 2
+                                                )
+                                        )
+                                        .shadow(color: Color.black.opacity(0.4), radius: 3, x: 0, y: 2)
+
+                                    // Hover preview (when empty)
+                                    if hoveredColumn == col && gameState.board[row][col] == nil {
+                                        if let targetRow = gameState.getDropRow(for: col), targetRow == row {
+                                            Circle()
+                                                .fill(gameState.currentPlayer.color.opacity(0.25))
+                                                .padding(4)
+                                        }
+                                    }
+
+                                    // Game piece
+                                    if let player = gameState.board[row][col] {
+                                        PieceView(
+                                            player: player,
+                                            isWinning: isWinning,
+                                            size: slotSize - 8
+                                        )
+                                        .padding(4)
+                                        .shadow(color: isWinning ? player.color.opacity(0.8) : Color.clear, radius: isWinning ? 10 : 0)
+                                    }
+                                }
+                                .frame(width: slotSize, height: slotSize)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if gameState.canDrop(in: col) {
+                                        gameState.dropPiece(in: col)
+                                        soundManager.playDrop()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                            if case .win = gameState.gameResult {
+                                                soundManager.playWin()
+                                            } else if case .draw = gameState.gameResult {
+                                                soundManager.playDraw()
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            .onHover { hovering in
-                                if hovering {
-                                    hoveredColumn = col
-                                } else if hoveredColumn == col {
-                                    hoveredColumn = nil
+                                .onHover { hovering in
+                                    if hovering {
+                                        hoveredColumn = col
+                                    } else if hoveredColumn == col {
+                                        hoveredColumn = nil
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                .padding(spacing)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [GameColors.boardBlueLight, GameColors.boardBlue, GameColors.boardBlueDark],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 2
+                                )
+                        )
+                        .shadow(color: Color.black.opacity(0.4), radius: 15, x: 0, y: 8)
+                )
+                .frame(width: boardWidth, height: boardHeight)
             }
-            .padding(spacing * 2)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(GameColors.boardBlue)
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -826,106 +966,176 @@ struct ContentView: View {
 
     var body: some View {
         let textColor = GameColors.textColor(for: effectiveColorScheme)
+        let bgColors = GameColors.background(for: effectiveColorScheme)
 
-        ZStack {
-            // Background
-            GameColors.background(for: effectiveColorScheme).bottom
+        GeometryReader { geo in
+            let isCompact = geo.size.height < 650
+            let titleSize: CGFloat = isCompact ? 26 : 34
+            let vSpacing: CGFloat = isCompact ? 10 : 16
+
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [bgColors.top, bgColors.bottom],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
                 .ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                // Top bar
-                HStack {
-                    Button(action: { soundManager.soundEnabled.toggle() }) {
-                        Image(systemName: soundManager.soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                            .foregroundColor(textColor.opacity(0.6))
+                VStack(spacing: vSpacing) {
+                    // Top bar
+                    HStack {
+                        // Sound toggle
+                        Button(action: { soundManager.soundEnabled.toggle() }) {
+                            Image(systemName: soundManager.soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(textColor.opacity(0.6))
+                                .frame(width: 36, height: 36)
+                                .background(GameColors.subtleBackground(for: effectiveColorScheme))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(soundManager.soundEnabled ? "Sound On" : "Sound Off")
+
+                        Spacer()
+
+                        // Appearance toggle
+                        HStack(spacing: 2) {
+                            ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                                Button(action: { appearanceMode = mode }) {
+                                    Image(systemName: mode.icon)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(appearanceMode == mode ? .white : textColor.opacity(0.5))
+                                        .frame(width: 32, height: 28)
+                                        .background(appearanceMode == mode ? GameColors.boardBlue : Color.clear)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .help(mode.rawValue)
+                            }
+                        }
+                        .padding(4)
+                        .background(GameColors.subtleBackground(for: effectiveColorScheme))
+                        .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 4)
 
-                    Spacer()
+                    // Title
+                    Text("CONNECT FOUR")
+                        .font(.system(size: titleSize, weight: .black, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [textColor, textColor.opacity(0.7)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 2)
 
+                    // Mode selector
                     HStack(spacing: 4) {
-                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                            Button(action: { appearanceMode = mode }) {
-                                Image(systemName: mode.icon)
-                                    .foregroundColor(appearanceMode == mode ? .white : textColor.opacity(0.5))
-                                    .padding(6)
-                                    .background(appearanceMode == mode ? GameColors.boardBlue : Color.clear)
-                                    .clipShape(Circle())
+                        ForEach(GameMode.allCases, id: \.self) { mode in
+                            Button(action: {
+                                if gameState.gameMode != mode {
+                                    gameState.gameMode = mode
+                                    gameState.reset()
+                                }
+                            }) {
+                                Text(mode.rawValue)
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundColor(gameState.gameMode == mode ? .white : textColor.opacity(0.6))
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 9)
+                                    .background(
+                                        Capsule()
+                                            .fill(gameState.gameMode == mode ?
+                                                  LinearGradient(colors: [GameColors.boardBlueLight, GameColors.boardBlue], startPoint: .top, endPoint: .bottom) :
+                                                    LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
+                                    )
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                }
+                    .padding(4)
+                    .background(GameColors.subtleBackground(for: effectiveColorScheme))
+                    .clipShape(Capsule())
 
-                // Title
-                Text("CONNECT FOUR")
-                    .font(.system(size: 32, weight: .black, design: .rounded))
-                    .foregroundColor(textColor)
+                    // Scores with player indicators
+                    HStack(spacing: isCompact ? 30 : 50) {
+                        PlayerIndicator(
+                            player: .red,
+                            score: gameState.scores[.red] ?? 0,
+                            isActive: gameState.currentPlayer == .red && gameState.gameResult == .ongoing,
+                            label: gameState.gameMode == .onePlayer ? "You" : "Red",
+                            compact: isCompact,
+                            colorScheme: effectiveColorScheme
+                        )
 
-                // Mode selector
-                HStack(spacing: 8) {
-                    ForEach(GameMode.allCases, id: \.self) { mode in
-                        Button(action: {
-                            if gameState.gameMode != mode {
-                                gameState.gameMode = mode
-                                gameState.reset()
+                        Text("VS")
+                            .font(.system(size: isCompact ? 14 : 18, weight: .bold, design: .rounded))
+                            .foregroundColor(textColor.opacity(0.25))
+
+                        PlayerIndicator(
+                            player: .yellow,
+                            score: gameState.scores[.yellow] ?? 0,
+                            isActive: gameState.currentPlayer == .yellow && gameState.gameResult == .ongoing,
+                            label: gameState.gameMode == .onePlayer ? "CPU" : "Yellow",
+                            compact: isCompact,
+                            colorScheme: effectiveColorScheme
+                        )
+                    }
+
+                    // Board
+                    BoardView(gameState: gameState, soundManager: soundManager, colorScheme: effectiveColorScheme)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Status and controls
+                    VStack(spacing: isCompact ? 8 : 12) {
+                        // Current player / thinking indicator
+                        HStack(spacing: 8) {
+                            if gameState.isAIThinking {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(textColor)
+                                Text("Computer is thinking...")
+                                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                                    .foregroundColor(textColor.opacity(0.7))
+                            } else if gameState.gameResult == .ongoing {
+                                Circle()
+                                    .fill(gameState.currentPlayer.color)
+                                    .frame(width: 14, height: 14)
+                                Text("\(gameState.currentPlayer.rawValue)'s Turn")
+                                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                                    .foregroundColor(textColor.opacity(0.8))
                             }
-                        }) {
-                            Text(mode.rawValue)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(gameState.gameMode == mode ? .white : textColor.opacity(0.6))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(gameState.gameMode == mode ? GameColors.boardBlue : Color.clear)
-                                .clipShape(Capsule())
+                        }
+                        .frame(height: 24)
+
+                        // New Game button
+                        Button(action: { gameState.reset() }) {
+                            Text("New Game")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundColor(textColor.opacity(0.8))
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(
+                                    Capsule()
+                                        .strokeBorder(textColor.opacity(0.25), lineWidth: 1.5)
+                                )
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(20)
 
-                // Scores
-                HStack(spacing: 40) {
-                    VStack {
-                        Circle().fill(Color.red).frame(width: 30, height: 30)
-                        Text("\(gameState.scores[.red] ?? 0)").font(.title2.bold()).foregroundColor(textColor)
+                // Game over overlay
+                if gameState.gameResult != .ongoing {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+
+                    GameOverView(result: gameState.gameResult) {
+                        gameState.reset()
                     }
-                    Text("VS").foregroundColor(textColor.opacity(0.3))
-                    VStack {
-                        Circle().fill(Color.yellow).frame(width: 30, height: 30)
-                        Text("\(gameState.scores[.yellow] ?? 0)").font(.title2.bold()).foregroundColor(textColor)
-                    }
-                }
-
-                // Board
-                BoardView(gameState: gameState, soundManager: soundManager, colorScheme: effectiveColorScheme)
-
-                // Current player
-                Text("\(gameState.currentPlayer.rawValue)'s Turn")
-                    .foregroundColor(textColor)
-
-                // New Game
-                Button("New Game") { gameState.reset() }
-                    .buttonStyle(.plain)
-                    .foregroundColor(textColor.opacity(0.8))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Capsule().stroke(textColor.opacity(0.3)))
-            }
-            .padding(20)
-
-            // Game over
-            if gameState.gameResult != .ongoing {
-                Color.black.opacity(0.6).ignoresSafeArea()
-                VStack(spacing: 20) {
-                    Text(gameState.gameResult == .draw ? "Draw!" : "\(gameState.currentPlayer.rawValue) Wins!")
-                        .font(.largeTitle.bold())
-                        .foregroundColor(.white)
-                    Button("Play Again") { gameState.reset() }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(GameColors.boardBlue)
-                        .clipShape(Capsule())
                 }
             }
         }
