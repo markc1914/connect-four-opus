@@ -165,8 +165,10 @@ class GameState: ObservableObject {
     @Published var gameMode: GameMode = .twoPlayers
     @Published var gameResult: GameResult = .ongoing
     @Published var winningCells: [(row: Int, col: Int)] = []
-    @Published var isAnimating: Bool = false
     @Published var scores: [Player: Int] = [.red: 0, .yellow: 0]
+
+    // Non-published flag to prevent clicks during AI turn
+    var isAIThinking: Bool = false
 
     init() {
         board = Array(repeating: Array(repeating: nil, count: GameState.columns), count: GameState.rows)
@@ -177,12 +179,12 @@ class GameState: ObservableObject {
         currentPlayer = .red
         gameResult = .ongoing
         winningCells = []
-        isAnimating = false
+        isAIThinking = false
     }
 
     func canDrop(in column: Int) -> Bool {
         guard column >= 0 && column < GameState.columns else { return false }
-        return board[0][column] == nil && gameResult == .ongoing && !isAnimating
+        return board[0][column] == nil && gameResult == .ongoing && !isAIThinking
     }
 
     func getDropRow(for column: Int) -> Int? {
@@ -197,28 +199,25 @@ class GameState: ObservableObject {
     func dropPiece(in column: Int) {
         guard canDrop(in: column), let row = getDropRow(for: column) else { return }
 
-        isAnimating = true
         board[row][column] = currentPlayer
 
         if let winCells = checkWin(row: row, col: column) {
             winningCells = winCells
             gameResult = .win(currentPlayer)
             scores[currentPlayer, default: 0] += 1
-            isAnimating = false
             return
         }
 
         if isBoardFull() {
             gameResult = .draw
-            isAnimating = false
             return
         }
 
         currentPlayer = currentPlayer.opponent
-        isAnimating = false
 
         if gameMode == .onePlayer && currentPlayer == .yellow && gameResult == .ongoing {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            isAIThinking = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.makeAIMove()
             }
         }
@@ -272,16 +271,31 @@ class GameState: ObservableObject {
     func makeAIMove() {
         guard gameResult == .ongoing else { return }
 
-        isAnimating = true
-
         // Run AI on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let bestCol = self.findBestMove()
 
             DispatchQueue.main.async {
-                self.isAnimating = false
-                self.dropPiece(in: bestCol)
+                self.isAIThinking = false
+                // Directly place the piece without going through canDrop check
+                if let row = self.getDropRow(for: bestCol) {
+                    self.board[row][bestCol] = .yellow
+
+                    if let winCells = self.checkWin(row: row, col: bestCol) {
+                        self.winningCells = winCells
+                        self.gameResult = .win(.yellow)
+                        self.scores[.yellow, default: 0] += 1
+                        return
+                    }
+
+                    if self.isBoardFull() {
+                        self.gameResult = .draw
+                        return
+                    }
+
+                    self.currentPlayer = .red
+                }
             }
         }
     }
