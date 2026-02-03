@@ -221,7 +221,7 @@ class GameState: ObservableObject {
         isAnimating = false
 
         if gameMode == .onePlayer && currentPlayer == .yellow && gameResult == .ongoing {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 self?.makeAIMove()
             }
         }
@@ -277,11 +277,8 @@ class GameState: ObservableObject {
 
         isAnimating = true
         let bestCol = findBestMove()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.isAnimating = false
-            self?.dropPiece(in: bestCol)
-        }
+        isAnimating = false
+        dropPiece(in: bestCol)
     }
 
     func findBestMove() -> Int {
