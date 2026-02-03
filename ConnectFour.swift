@@ -446,8 +446,6 @@ struct PieceView: View {
     let isWinning: Bool
     let size: CGFloat
 
-    @State private var pulseScale: CGFloat = 1.0
-
     var body: some View {
         Circle()
             .fill(
@@ -467,14 +465,7 @@ struct PieceView: View {
                     .strokeBorder(player.darkColor.opacity(0.4), lineWidth: 1.5)
             )
             .shadow(color: Color.black.opacity(0.3), radius: 2, x: 1, y: 2)
-            .scaleEffect(isWinning ? pulseScale : 1.0)
-            .onAppear {
-                if isWinning {
-                    withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
-                        pulseScale = 1.08
-                    }
-                }
-            }
+            .scaleEffect(isWinning ? 1.05 : 1.0)
     }
 }
 
@@ -564,12 +555,9 @@ struct BoardView: View {
                                     size: slotSize - 8
                                 )
                                 .opacity(0.85)
-                                .shadow(color: gameState.currentPlayer.color.opacity(0.6), radius: 8)
-                                .transition(.scale.combined(with: .opacity))
                             }
                         }
                         .frame(width: slotSize, height: slotSize)
-                        .animation(.easeOut(duration: 0.15), value: hoveredColumn)
                     }
                 }
                 .padding(.horizontal, spacing * 2)
@@ -639,12 +627,10 @@ struct BoardView: View {
                                         }
                                     }
                                     .onHover { hovering in
-                                        withAnimation(.easeOut(duration: 0.1)) {
-                                            if hovering {
-                                                hoveredColumn = col
-                                            } else if hoveredColumn == col {
-                                                hoveredColumn = nil
-                                            }
+                                        if hovering {
+                                            hoveredColumn = col
+                                        } else if hoveredColumn == col {
+                                            hoveredColumn = nil
                                         }
                                     }
                                 }
