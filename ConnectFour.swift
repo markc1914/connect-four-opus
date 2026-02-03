@@ -568,21 +568,15 @@ struct BoardView: View {
     @State private var hoveredColumn: Int? = nil
     var colorScheme: ColorScheme = .dark
 
+    private let baseSlotSize: CGFloat = 52
+    private let baseSpacing: CGFloat = 6
+
     var body: some View {
-        GeometryReader { geometry in
-            let availableHeight = geometry.size.height - 40
-            let availableWidth = geometry.size.width - 20
-            let slotFromHeight = availableHeight / (CGFloat(GameState.rows) + 1.8)
-            let slotFromWidth = availableWidth / (CGFloat(GameState.columns) + 0.8)
-            let slotSize = min(min(slotFromHeight, slotFromWidth), 60)
-            let spacing = max(slotSize * 0.12, 4)
-            let cornerRadius = slotSize * 0.3
+        let slotSize = baseSlotSize
+        let spacing = baseSpacing
+        let cornerRadius = slotSize * 0.3
 
-            let boardWidth = (slotSize + spacing) * CGFloat(GameState.columns) + spacing * 3
-
-            HStack {
-                Spacer(minLength: 0)
-                VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 // Hover indicator row
                 HStack(spacing: spacing) {
                     ForEach(0..<GameState.columns, id: \.self) { col in
@@ -707,10 +701,6 @@ struct BoardView: View {
                         .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 4)
                 }
                 .offset(y: -4)
-                }
-                .frame(width: boardWidth)
-                Spacer(minLength: 0)
-            }
         }
     }
 }
