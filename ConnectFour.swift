@@ -148,6 +148,28 @@ enum GameMode: String, CaseIterable {
     case twoPlayers = "2 Players"
 }
 
+enum Difficulty: String, CaseIterable {
+    case easy = "Easy"
+    case medium = "Medium"
+    case hard = "Hard"
+    
+    var searchDepth: Int {
+        switch self {
+        case .easy: return 2
+        case .medium: return 4
+        case .hard: return 6
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .easy: return "tortoise.fill"
+        case .medium: return "hare.fill"
+        case .hard: return "bolt.fill"
+        }
+    }
+}
+
 enum GameResult: Equatable {
     case ongoing
     case win(Player)
@@ -163,6 +185,7 @@ class GameState: ObservableObject {
     @Published var board: [[Player?]]
     @Published var currentPlayer: Player = .red
     @Published var gameMode: GameMode = .twoPlayers
+    @Published var difficulty: Difficulty = .easy
     @Published var gameResult: GameResult = .ongoing
     @Published var winningCells: [(row: Int, col: Int)] = []
     @Published var scores: [Player: Int] = [.red: 0, .yellow: 0]
@@ -309,13 +332,24 @@ class GameState: ObservableObject {
         var bestScore = Int.min
         var bestCol = 3
 
+        // For easy mode, add some randomness
+        let shouldMakeRandomMove = difficulty == .easy && Int.random(in: 0...100) < 30
+        
+        if shouldMakeRandomMove {
+            // 30% chance to make a random valid move on easy
+            let validColumns = (0..<GameState.columns).filter { searchBoard[0][$0] == nil }
+            if !validColumns.isEmpty {
+                return validColumns.randomElement()!
+            }
+        }
+
         for col in [3, 2, 4, 1, 5, 0, 6] {
             guard searchBoard[0][col] == nil else { continue }
 
             let row = getDropRowAI(board: searchBoard, col: col)!
             searchBoard[row][col] = .yellow
 
-            let score = minimaxAI(board: &searchBoard, depth: 4, alpha: Int.min, beta: Int.max, isMaximizing: false)
+            let score = minimaxAI(board: &searchBoard, depth: difficulty.searchDepth, alpha: Int.min, beta: Int.max, isMaximizing: false)
 
             searchBoard[row][col] = nil
 
@@ -954,6 +988,34 @@ struct SoundToggleButton: View {
     }
 }
 
+struct DifficultyButton: View {
+    let difficulty: Difficulty
+    let isSelected: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: difficulty.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(difficulty.rawValue)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+            .foregroundColor(isSelected ? .white : GameColors.textColor(for: colorScheme).opacity(0.6))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(isSelected ? 
+                          LinearGradient(colors: [GameColors.boardBlueLight, GameColors.boardBlue], startPoint: .top, endPoint: .bottom) :
+                          LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct ContentView: View {
     @StateObject private var gameState = GameState()
     @StateObject private var soundManager = SoundManager()
@@ -1059,6 +1121,28 @@ struct ContentView: View {
                     .padding(4)
                     .background(GameColors.subtleBackground(for: effectiveColorScheme))
                     .clipShape(Capsule())
+                    
+                    // Difficulty selector (only show for single player mode)
+                    if gameState.gameMode == .onePlayer {
+                        HStack(spacing: 4) {
+                            ForEach(Difficulty.allCases, id: \.self) { difficulty in
+                                DifficultyButton(
+                                    difficulty: difficulty,
+                                    isSelected: gameState.difficulty == difficulty,
+                                    colorScheme: effectiveColorScheme
+                                ) {
+                                    if gameState.difficulty != difficulty {
+                                        gameState.difficulty = difficulty
+                                        gameState.reset()
+                                    }
+                                }
+                            }
+                        }
+                        .padding(4)
+                        .background(GameColors.subtleBackground(for: effectiveColorScheme))
+                        .clipShape(Capsule())
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
 
                     // Scores with player indicators
                     HStack(spacing: isCompact ? 30 : 50) {
