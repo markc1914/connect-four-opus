@@ -527,127 +527,67 @@ struct BoardView: View {
     @State private var hoveredColumn: Int? = nil
     var colorScheme: ColorScheme = .dark
 
+    private let slotSize: CGFloat = 50
+    private let spacing: CGFloat = 5
+
     var body: some View {
-        GeometryReader { geometry in
-            let availableWidth = geometry.size.width - 32
-            let availableHeight = geometry.size.height - 80
-
-            let maxSlotFromWidth = availableWidth / (CGFloat(GameState.columns) + 0.5)
-            let maxSlotFromHeight = availableHeight / (CGFloat(GameState.rows) + 1.2)
-            let slotSize = min(min(maxSlotFromWidth, maxSlotFromHeight), 70)
-            let spacing = max(slotSize * 0.1, 4)
-            let cornerRadius = slotSize * 0.25
-
-            let boardWidth = slotSize * CGFloat(GameState.columns) + spacing * CGFloat(GameState.columns + 1)
-
-            VStack(spacing: 0) {
-                // Hover indicator row
-                HStack(spacing: spacing) {
-                    ForEach(0..<GameState.columns, id: \.self) { col in
-                        ZStack {
-                            Circle()
-                                .fill(Color.clear)
-
-                            if hoveredColumn == col && gameState.canDrop(in: col) {
-                                PieceView(
-                                    player: gameState.currentPlayer,
-                                    isWinning: false,
-                                    size: slotSize - 8
-                                )
-                                .opacity(0.85)
-                            }
-                        }
+        VStack(spacing: 0) {
+            // Hover indicator row
+            HStack(spacing: spacing) {
+                ForEach(0..<GameState.columns, id: \.self) { col in
+                    Circle()
+                        .fill(hoveredColumn == col && gameState.canDrop(in: col) ? gameState.currentPlayer.color.opacity(0.6) : Color.clear)
                         .frame(width: slotSize, height: slotSize)
-                    }
                 }
-                .padding(.horizontal, spacing * 2)
-                .padding(.bottom, spacing)
+            }
+            .padding(.bottom, spacing)
 
-                // Game board with frame
-                ZStack {
-                    // Board outer frame
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(stops: [
-                                    .init(color: GameColors.boardBlueLight, location: 0.0),
-                                    .init(color: GameColors.boardBlue, location: 0.3),
-                                    .init(color: GameColors.boardBlueDark, location: 1.0)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: cornerRadius)
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.3),
-                                            Color.white.opacity(0.1),
-                                            Color.black.opacity(0.2)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 2
-                                )
-                        )
-                        .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 8)
+            // Game board
+            VStack(spacing: spacing) {
+                ForEach(0..<GameState.rows, id: \.self) { row in
+                    HStack(spacing: spacing) {
+                        ForEach(0..<GameState.columns, id: \.self) { col in
+                            ZStack {
+                                Circle()
+                                    .fill(GameColors.slotBackground(for: colorScheme))
 
-                    // Grid of slots
-                    VStack(spacing: spacing) {
-                        ForEach(0..<GameState.rows, id: \.self) { row in
-                            HStack(spacing: spacing) {
-                                ForEach(0..<GameState.columns, id: \.self) { col in
-                                    SlotView(
-                                        row: row,
-                                        col: col,
-                                        player: gameState.board[row][col],
-                                        isWinning: gameState.winningCells.contains { $0.row == row && $0.col == col },
-                                        isHovered: hoveredColumn == col,
-                                        hoverPlayer: gameState.currentPlayer,
-                                        slotSize: slotSize,
-                                        colorScheme: colorScheme
-                                    )
-                                    .frame(width: slotSize, height: slotSize)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        if gameState.canDrop(in: col) {
-                                            gameState.dropPiece(in: col)
-                                            soundManager.playDrop()
-                                            // Check for win/draw after drop
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                                if case .win = gameState.gameResult {
-                                                    soundManager.playWin()
-                                                } else if case .draw = gameState.gameResult {
-                                                    soundManager.playDraw()
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .onHover { hovering in
-                                        if hovering {
-                                            hoveredColumn = col
-                                        } else if hoveredColumn == col {
-                                            hoveredColumn = nil
+                                if let player = gameState.board[row][col] {
+                                    Circle()
+                                        .fill(player.color)
+                                        .padding(4)
+                                }
+                            }
+                            .frame(width: slotSize, height: slotSize)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if gameState.canDrop(in: col) {
+                                    gameState.dropPiece(in: col)
+                                    soundManager.playDrop()
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                        if case .win = gameState.gameResult {
+                                            soundManager.playWin()
+                                        } else if case .draw = gameState.gameResult {
+                                            soundManager.playDraw()
                                         }
                                     }
                                 }
                             }
+                            .onHover { hovering in
+                                if hovering {
+                                    hoveredColumn = col
+                                } else if hoveredColumn == col {
+                                    hoveredColumn = nil
+                                }
+                            }
                         }
                     }
-                    .padding(spacing * 2)
                 }
-
-                // Board stand/base
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(GameColors.boardBlueDark)
-                    .frame(width: boardWidth * 0.85, height: max(slotSize * 0.3, 14))
-                    .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 3)
-                    .offset(y: -2)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(spacing * 2)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(GameColors.boardBlue)
+            )
         }
     }
 }
