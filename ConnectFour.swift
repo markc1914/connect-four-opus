@@ -748,7 +748,6 @@ struct PlayerIndicator: View {
                         )
                 )
         )
-        .animation(.easeInOut(duration: 0.3), value: isActive)
     }
 }
 
@@ -826,161 +825,109 @@ struct ContentView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let isCompact = geometry.size.height < 650
-            let titleSize: CGFloat = isCompact ? 28 : 36
-            let spacing: CGFloat = isCompact ? 12 : 20
-            let padding: CGFloat = isCompact ? 16 : 24
-            let colors = GameColors.background(for: effectiveColorScheme)
-            let textColor = GameColors.textColor(for: effectiveColorScheme)
+        let textColor = GameColors.textColor(for: effectiveColorScheme)
 
-            ZStack {
-                // Background
-                colors.bottom
-                    .ignoresSafeArea()
+        ZStack {
+            // Background
+            GameColors.background(for: effectiveColorScheme).bottom
+                .ignoresSafeArea()
 
-                VStack(spacing: spacing) {
-                    // Top bar with sound and appearance toggles
-                    HStack {
-                        // Sound toggle
-                        HStack(spacing: 2) {
-                            SoundToggleButton(
-                                soundEnabled: $soundManager.soundEnabled,
-                                colorScheme: effectiveColorScheme
-                            )
-                        }
-                        .padding(4)
-                        .background(
-                            Capsule()
-                                .fill(GameColors.subtleBackground(for: effectiveColorScheme))
-                        )
-
-                        Spacer()
-
-                        // Appearance toggle
-                        HStack(spacing: 2) {
-                            ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                                AppearanceButton(
-                                    mode: mode,
-                                    isSelected: appearanceMode == mode,
-                                    colorScheme: effectiveColorScheme
-                                ) {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        appearanceMode = mode
-                                    }
-                                }
-                            }
-                        }
-                        .padding(4)
-                        .background(
-                            Capsule()
-                                .fill(GameColors.subtleBackground(for: effectiveColorScheme))
-                        )
-                    }
-
-                    // Header
-                    Text("CONNECT FOUR")
-                        .font(.system(size: titleSize, weight: .black, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [textColor, textColor.opacity(0.8)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .tracking(3)
-                        .shadow(color: GameColors.boardBlue.opacity(0.5), radius: 10)
-
-                    // Game mode selector
-                    HStack(spacing: 8) {
-                        ForEach(GameMode.allCases, id: \.self) { mode in
-                            GameModeButton(
-                                mode: mode,
-                                isSelected: gameState.gameMode == mode,
-                                colorScheme: effectiveColorScheme
-                            ) {
-                                if gameState.gameMode != mode {
-                                    gameState.gameMode = mode
-                                    gameState.reset()
-                                }
-                            }
-                        }
-                    }
-                    .padding(4)
-                    .background(
-                        Capsule()
-                            .fill(GameColors.subtleBackground(for: effectiveColorScheme))
-                    )
-
-                    // Score display
-                    HStack(spacing: isCompact ? 24 : 40) {
-                        PlayerIndicator(
-                            player: .red,
-                            score: gameState.scores[.red] ?? 0,
-                            isActive: gameState.currentPlayer == .red && gameState.gameResult == .ongoing,
-                            label: gameState.gameMode == .onePlayer ? "You" : "Red",
-                            compact: isCompact,
-                            colorScheme: effectiveColorScheme
-                        )
-
-                        VStack {
-                            Text("VS")
-                                .font(.system(size: isCompact ? 14 : 16, weight: .bold, design: .rounded))
-                                .foregroundColor(textColor.opacity(0.3))
-                        }
-
-                        PlayerIndicator(
-                            player: .yellow,
-                            score: gameState.scores[.yellow] ?? 0,
-                            isActive: gameState.currentPlayer == .yellow && gameState.gameResult == .ongoing,
-                            label: gameState.gameMode == .onePlayer ? "CPU" : "Yellow",
-                            compact: isCompact,
-                            colorScheme: effectiveColorScheme
-                        )
-                    }
-
-                    // Game board
-                    BoardView(gameState: gameState, soundManager: soundManager, colorScheme: effectiveColorScheme)
-                        .layoutPriority(1)
-
-                    // New Game button
-                    Button(action: { gameState.reset() }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: isCompact ? 12 : 14, weight: .semibold))
-                            Text("New Game")
-                                .font(.system(size: isCompact ? 12 : 14, weight: .semibold, design: .rounded))
-                        }
-                        .foregroundColor(textColor.opacity(0.8))
-                        .padding(.horizontal, isCompact ? 18 : 24)
-                        .padding(.vertical, isCompact ? 8 : 12)
-                        .background(
-                            Capsule()
-                                .fill(GameColors.subtleBackground(for: effectiveColorScheme))
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(textColor.opacity(0.2), lineWidth: 1)
-                                )
-                        )
+            VStack(spacing: 16) {
+                // Top bar
+                HStack {
+                    Button(action: { soundManager.soundEnabled.toggle() }) {
+                        Image(systemName: soundManager.soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            .foregroundColor(textColor.opacity(0.6))
                     }
                     .buttonStyle(.plain)
-                }
-                .padding(padding)
 
-                // Game over overlay
-                if gameState.gameResult != .ongoing {
-                    Color.black.opacity(0.6)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
+                    Spacer()
 
-                    GameOverView(result: gameState.gameResult) {
-                        withAnimation {
-                            gameState.reset()
+                    HStack(spacing: 4) {
+                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                            Button(action: { appearanceMode = mode }) {
+                                Image(systemName: mode.icon)
+                                    .foregroundColor(appearanceMode == mode ? .white : textColor.opacity(0.5))
+                                    .padding(6)
+                                    .background(appearanceMode == mode ? GameColors.boardBlue : Color.clear)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
+
+                // Title
+                Text("CONNECT FOUR")
+                    .font(.system(size: 32, weight: .black, design: .rounded))
+                    .foregroundColor(textColor)
+
+                // Mode selector
+                HStack(spacing: 8) {
+                    ForEach(GameMode.allCases, id: \.self) { mode in
+                        Button(action: {
+                            if gameState.gameMode != mode {
+                                gameState.gameMode = mode
+                                gameState.reset()
+                            }
+                        }) {
+                            Text(mode.rawValue)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(gameState.gameMode == mode ? .white : textColor.opacity(0.6))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(gameState.gameMode == mode ? GameColors.boardBlue : Color.clear)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // Scores
+                HStack(spacing: 40) {
+                    VStack {
+                        Circle().fill(Color.red).frame(width: 30, height: 30)
+                        Text("\(gameState.scores[.red] ?? 0)").font(.title2.bold()).foregroundColor(textColor)
+                    }
+                    Text("VS").foregroundColor(textColor.opacity(0.3))
+                    VStack {
+                        Circle().fill(Color.yellow).frame(width: 30, height: 30)
+                        Text("\(gameState.scores[.yellow] ?? 0)").font(.title2.bold()).foregroundColor(textColor)
+                    }
+                }
+
+                // Board
+                BoardView(gameState: gameState, soundManager: soundManager, colorScheme: effectiveColorScheme)
+
+                // Current player
+                Text("\(gameState.currentPlayer.rawValue)'s Turn")
+                    .foregroundColor(textColor)
+
+                // New Game
+                Button("New Game") { gameState.reset() }
+                    .buttonStyle(.plain)
+                    .foregroundColor(textColor.opacity(0.8))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Capsule().stroke(textColor.opacity(0.3)))
             }
-            .animation(.easeInOut(duration: 0.3), value: gameState.gameResult)
+            .padding(20)
+
+            // Game over
+            if gameState.gameResult != .ongoing {
+                Color.black.opacity(0.6).ignoresSafeArea()
+                VStack(spacing: 20) {
+                    Text(gameState.gameResult == .draw ? "Draw!" : "\(gameState.currentPlayer.rawValue) Wins!")
+                        .font(.largeTitle.bold())
+                        .foregroundColor(.white)
+                    Button("Play Again") { gameState.reset() }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(GameColors.boardBlue)
+                        .clipShape(Capsule())
+                }
+            }
         }
         .preferredColorScheme(appearanceMode.colorScheme)
     }
