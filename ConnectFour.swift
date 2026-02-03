@@ -165,7 +165,6 @@ class GameState: ObservableObject {
     @Published var gameMode: GameMode = .twoPlayers
     @Published var gameResult: GameResult = .ongoing
     @Published var winningCells: [(row: Int, col: Int)] = []
-    @Published var lastDroppedPosition: (row: Int, col: Int)? = nil
     @Published var isAnimating: Bool = false
     @Published var scores: [Player: Int] = [.red: 0, .yellow: 0]
 
@@ -178,7 +177,6 @@ class GameState: ObservableObject {
         currentPlayer = .red
         gameResult = .ongoing
         winningCells = []
-        lastDroppedPosition = nil
         isAnimating = false
     }
 
@@ -201,7 +199,6 @@ class GameState: ObservableObject {
 
         isAnimating = true
         board[row][column] = currentPlayer
-        lastDroppedPosition = (row, column)
 
         if let winCells = checkWin(row: row, col: column) {
             winningCells = winCells
@@ -433,10 +430,8 @@ class GameState: ObservableObject {
 struct PieceView: View {
     let player: Player
     let isWinning: Bool
-    let animate: Bool
     let size: CGFloat
 
-    @State private var dropOffset: CGFloat = -400
     @State private var pulseScale: CGFloat = 1.0
 
     var body: some View {
@@ -459,13 +454,7 @@ struct PieceView: View {
             )
             .shadow(color: Color.black.opacity(0.3), radius: 2, x: 1, y: 2)
             .scaleEffect(isWinning ? pulseScale : 1.0)
-            .offset(y: animate ? dropOffset : 0)
             .onAppear {
-                if animate {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        dropOffset = 0
-                    }
-                }
                 if isWinning {
                     withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
                         pulseScale = 1.08
@@ -480,7 +469,6 @@ struct SlotView: View {
     let col: Int
     let player: Player?
     let isWinning: Bool
-    let isLastDropped: Bool
     let isHovered: Bool
     let hoverPlayer: Player
     let slotSize: CGFloat
@@ -520,7 +508,6 @@ struct SlotView: View {
                 PieceView(
                     player: player,
                     isWinning: isWinning,
-                    animate: isLastDropped,
                     size: slotSize
                 )
                 .padding(5)
@@ -560,7 +547,6 @@ struct BoardView: View {
                                 PieceView(
                                     player: gameState.currentPlayer,
                                     isWinning: false,
-                                    animate: false,
                                     size: slotSize - 8
                                 )
                                 .opacity(0.85)
@@ -617,7 +603,6 @@ struct BoardView: View {
                                         col: col,
                                         player: gameState.board[row][col],
                                         isWinning: gameState.winningCells.contains { $0.row == row && $0.col == col },
-                                        isLastDropped: gameState.lastDroppedPosition?.row == row && gameState.lastDroppedPosition?.col == col,
                                         isHovered: hoveredColumn == col,
                                         hoverPlayer: gameState.currentPlayer,
                                         slotSize: slotSize,
@@ -800,7 +785,6 @@ struct PlayerIndicator: View {
                 PieceView(
                     player: player,
                     isWinning: false,
-                    animate: false,
                     size: pieceSize
                 )
                 .frame(width: pieceSize, height: pieceSize)
