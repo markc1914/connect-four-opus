@@ -276,9 +276,17 @@ class GameState: ObservableObject {
         guard gameResult == .ongoing else { return }
 
         isAnimating = true
-        let bestCol = findBestMove()
-        isAnimating = false
-        dropPiece(in: bestCol)
+
+        // Run AI on background thread
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let bestCol = self.findBestMove()
+
+            DispatchQueue.main.async {
+                self.isAnimating = false
+                self.dropPiece(in: bestCol)
+            }
+        }
     }
 
     func findBestMove() -> Int {
@@ -291,7 +299,7 @@ class GameState: ObservableObject {
             let row = getDropRow(for: col)!
             board[row][col] = .yellow
 
-            let score = minimax(depth: 5, alpha: Int.min, beta: Int.max, isMaximizing: false)
+            let score = minimax(depth: 4, alpha: Int.min, beta: Int.max, isMaximizing: false)
 
             board[row][col] = nil
 
@@ -527,15 +535,20 @@ struct BoardView: View {
     @State private var hoveredColumn: Int? = nil
     var colorScheme: ColorScheme = .dark
 
-    private let baseSlotSize: CGFloat = 52
-    private let baseSpacing: CGFloat = 6
-
     var body: some View {
-        let slotSize = baseSlotSize
-        let spacing = baseSpacing
-        let cornerRadius = slotSize * 0.3
+        GeometryReader { geometry in
+            let availableWidth = geometry.size.width - 32
+            let availableHeight = geometry.size.height - 80
 
-        VStack(spacing: 0) {
+            let maxSlotFromWidth = availableWidth / (CGFloat(GameState.columns) + 0.5)
+            let maxSlotFromHeight = availableHeight / (CGFloat(GameState.rows) + 1.2)
+            let slotSize = min(min(maxSlotFromWidth, maxSlotFromHeight), 70)
+            let spacing = max(slotSize * 0.1, 4)
+            let cornerRadius = slotSize * 0.25
+
+            let boardWidth = slotSize * CGFloat(GameState.columns) + spacing * CGFloat(GameState.columns + 1)
+
+            VStack(spacing: 0) {
                 // Hover indicator row
                 HStack(spacing: spacing) {
                     ForEach(0..<GameState.columns, id: \.self) { col in
@@ -643,23 +656,13 @@ struct BoardView: View {
                 }
 
                 // Board stand/base
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    GameColors.boardBlueDark,
-                                    GameColors.boardBlueDark.opacity(0.8)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: max(slotSize * 0.35, 16))
-                        .padding(.horizontal, slotSize * 0.6)
-                        .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 4)
-                }
-                .offset(y: -4)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(GameColors.boardBlueDark)
+                    .frame(width: boardWidth * 0.85, height: max(slotSize * 0.3, 14))
+                    .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 3)
+                    .offset(y: -2)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
